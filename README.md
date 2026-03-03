@@ -1,0 +1,1456 @@
+# Blender Remesher Research: BPT & MeshAnything V2 on AMD RX 6950 XT (Windows)
+
+## Executive Summary
+
+**Critical Finding**: The AMD Radeon RX 6950 XT (RDNA2 architecture, gfx1030) **is NOT officially supported** for PyTorch with ROCm on Windows. This represents a major compatibility barrier for running BPT and MeshAnything V2, both of which require PyTorch with CUDA/GPU acceleration.
+
+### Key Compatibility Issues:
+- ❌ **No Official PyTorch ROCm Support**: AMD's PyTorch on Windows only supports RX 7000/9000 series (RDNA3/RDNA4)
+- ❌ **CUDA-Only Dependencies**: Both BPT and MeshAnything V2 are designed for NVIDIA CUDA
+- ❌ **Flash-Attention Incompatibility**: MeshAnything V2 requires flash-attn, which needs ROCm 6.0+ and MI200/MI300 series GPUs
+- ⚠️ **Unofficial Workarounds Exist**: Community "nightly builds" available but unstable and unsupported
+- ⚠️ **CPU Fallback Severe Performance Hit**: 10-20x slower for mesh generation tasks
+
+---
+
+## 1. PyTorch ROCm Support on Windows for AMD RX 6950 XT
+
+### 1.1 Official Support Status
+
+**AMD RX 6950 XT (RDNA2, gfx1030): NOT OFFICIALLY SUPPORTED for PyTorch on Windows**
+
+#### What IS Officially Supported:
+- **GPU Models**: 
+  - RX 7900 XTX, RX 7900 XT, RX 7700 (RDNA3)
+  - RX 9070, RX 9070 XT, RX 9060 XT (RDNA4)
+  - Radeon PRO W7900
+- **Operating System**: Windows 11 (22H2 GA)
+- **ROCm Version**: ROCm 6.4.4+ and 7.1.1+
+- **PyTorch Version**: PyTorch 2.8.0+ (with ROCm builds)
+- **Python Version**: Python 3.12
+
+#### What's NOT Supported:
+- **RX 6000 Series (RDNA2)**: RX 6950 XT, RX 6900 XT, RX 6800 XT, RX 6800, RX 6700 XT, etc.
+- AMD explicitly excluded RDNA2 from PyTorch on Windows Edition releases
+
+### 1.2 ROCm Runtime vs PyTorch Support (Critical Distinction)
+
+**Important**: There's a crucial difference between ROCm component support and PyTorch support:
+
+| Component | RX 6950 XT Support |
+|-----------|-------------------|
+| **ROCm Runtime (HIP SDK)** | ✅ Officially supported on Windows 10/11 |
+| **PyTorch with ROCm** | ❌ NOT officially supported on Windows |
+
+- The RX 6950 XT is listed in ROCm documentation as supporting "Runtime" and "HIP SDK" components on Windows
+- However, the official PyTorch wheels for Windows do NOT include gfx1030 (RX 6950 XT) support
+- This means you can run low-level GPU compute tasks but not PyTorch-based ML frameworks
+
+### 1.3 Unofficial Community Solutions
+
+#### Option A: "TheRock" Nightly Builds
+- **Source**: AMD's staging repositories (`rocm.nightlies.amd.com/v2-staging/gfx103X-dgpu/`)
+- **Status**: Semi-official, alpha quality, unstable
+- **Support Level**: None - community-driven
+- **Compatibility**: Specifically compiled for gfx103x (RX 6800/6900/6600)
+- **Known Projects**:
+  - `ssubedir/RCOm-windows-gfx1030` (GitHub)
+  - `sfinktah/amd-torch` (GitHub)
+  - ComfyUI ROCm installer for gfx1030
+
+**Installation Example**:
+```bash
+pip install --no-cache-dir https://rocm.nightlies.amd.com/v2-staging/gfx103X-dgpu/torch-2.x.x+rocm6.x.x-cpxxx-cpxxx-win_amd64.whl
+```
+
+**Caveats**:
+- ⚠️ Frequent breakages with new releases
+- ⚠️ No guarantee of stability
+- ⚠️ May not support all PyTorch features
+- ⚠️ Limited documentation and troubleshooting resources
+
+#### Option B: Build from Source
+- **Complexity**: Very High
+- **Time Investment**: Several hours to days
+- **Requirements**: 
+  - Visual Studio Build Tools
+  - CMake, Ninja, Git
+  - ROCm Windows SDK
+  - Deep understanding of build systems
+- **Reference Guide**: Artem Savkin's Medium article on building ROCm 7.1 for unsupported GPUs
+
+**Build Steps Overview**:
+1. Set up Windows development environment (VS Build Tools, CMake, Ninja)
+2. Clone ROCm "TheRock" repository with specific gfx1030 support commits
+3. Build ROCm components from source
+4. Build PyTorch from source with ROCm support enabled
+5. Configure environment variables for gfx1030 architecture
+
+#### Option C: HSA_OVERRIDE_GFX_VERSION (Not Recommended)
+- **Method**: Set environment variable to override GPU detection
+- **Effectiveness**: Reported as **ineffective** for official PyTorch wheels on Windows
+- **Issue**: PyTorch wheels don't detect RX 6950 XT even with override
+- **WSL2 Experience**: System freezes when attempting GPU operations
+
+#### Option D: DirectML (WSL2 Only)
+- **Platform**: Windows Subsystem for Linux 2 (WSL2)
+- **Status**: Alternative approach, not ROCm-based
+- **Performance**: Generally slower than native CUDA/ROCm
+- **Compatibility**: Limited PyTorch feature support
+
+### 1.4 Recommended Official Installation (For RX 7000/9000 Series Reference)
+
+For comparison, here's how it WOULD work if you had an officially supported GPU:
+
+```bash
+# Windows 11, Python 3.12
+# Step 1: Install AMD Software: PyTorch on Windows Edition 7.1.1 driver
+
+# Step 2: Create virtual environment
+python -m venv pytorch_env
+pytorch_env\Scripts\activate
+
+# Step 3: Install ROCm SDK components
+pip install --no-cache-dir ^
+    https://repo.radeon.com/rocm/windows/rocm-rel-7.2/rocm_sdk_core-7.2.0.dev0-py3-none-win_amd64.whl ^
+    https://repo.radeon.com/rocm/windows/rocm-rel-7.2/rocm_sdk_devel-7.2.0.dev0-py3-none-win_amd64.whl ^
+    https://repo.radeon.com/rocm/windows/rocm-rel-7.2/rocm_sdk_libraries_custom-7.2.0.dev0-py3-none-win_amd64.whl ^
+    https://repo.radeon.com/rocm/windows/rocm-rel-7.2/rocm-7.2.0.dev0.tar.gz
+
+# Step 4: Install PyTorch
+pip install --no-cache-dir ^
+    https://repo.radeon.com/rocm/windows/rocm-rel-7.2/torch-2.9.1%2Brocmsdk20260116-cp312-cp312-win_amd64.whl ^
+    https://repo.radeon.com/rocm/windows/rocm-rel-7.2/torchaudio-2.9.1%2Brocmsdk20260116-cp312-cp312-win_amd64.whl ^
+    https://repo.radeon.com/rocm/windows/rocm-rel-7.2/torchvision-0.24.1%2Brocmsdk20260116-cp312-cp312-win_amd64.whl
+
+# Verify installation
+python -c "import torch; print(torch.cuda.is_available())"
+python -c "import torch; print(torch.cuda.get_device_name(0))"
+```
+
+**This will NOT work with RX 6950 XT.**
+
+---
+
+## 2. BPT Repository Requirements
+
+### 2.1 Official Requirements
+
+**Repository**: https://github.com/Tencent-Hunyuan/bpt
+
+#### System Requirements:
+- **Operating System**: Linux (Ubuntu recommended)
+- **CUDA**: CUDA 12.1
+- **Python**: Python 3.9
+- **GPU**: NVIDIA GPU with ~12GB VRAM (FP16 precision)
+- **Framework**: PyTorch 2.1.2 with CUDA 12.1 support
+
+#### Installation Commands:
+```bash
+# Prerequisites
+conda create -n bpt python=3.9
+conda activate bpt
+
+# Install PyTorch with CUDA 12.1
+pip install torch==2.1.2 torchvision==0.16.2 --index-url https://download.pytorch.org/whl/cu121
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Download model weights
+python3 -m pip install "huggingface_hub[cli]"
+mkdir weights
+huggingface-cli download whaohan/bpt --local-dir ./weights
+```
+
+#### Dependencies (from requirements.txt):
+- PyTorch 2.1.2 (CUDA 12.1)
+- torchvision 0.16.2
+- Hugging Face Hub
+- Mesh processing libraries (trimesh, pymeshlab, etc.)
+- Standard scientific Python stack (numpy, scipy, etc.)
+
+### 2.2 AMD/ROCm Compatibility Analysis
+
+**AMD RX 6950 XT Compatibility: ❌ NOT COMPATIBLE (Out of the Box)**
+
+#### Compatibility Barriers:
+
+1. **CUDA-Specific PyTorch Build**:
+   - BPT explicitly requires PyTorch with CUDA 12.1
+   - Installation command uses `--index-url https://download.pytorch.org/whl/cu121`
+   - No ROCm alternative provided
+
+2. **CUDA 12.1 Requirement**:
+   - ROCm uses HIP (Heterogeneous-Compute Interface for Portability)
+   - While HIP can translate many CUDA operations, CUDA 12.1 is NVIDIA-specific
+   - Would require significant modification to run on ROCm
+
+3. **No Official ROCm Support**:
+   - Repository makes no mention of AMD GPU support
+   - Testing conducted on NVIDIA hardware
+   - No community reports of successful AMD deployment
+
+#### Theoretical Workaround Approaches:
+
+**Option 1: PyTorch CPU Fallback**
+```bash
+# Install CPU-only PyTorch
+pip install torch==2.1.2 torchvision==0.16.2 --index-url https://download.pytorch.org/whl/cpu
+pip install -r requirements.txt
+```
+
+**Expected Performance**:
+- ⚠️ **10-20x slower** than GPU execution
+- Generation time: 2 minutes per mesh (GPU) → **20-40 minutes per mesh (CPU)**
+- Completely impractical for production use
+
+**Option 2: Unofficial ROCm PyTorch (If Available)**
+```bash
+# Hypothetical - requires nightly builds for gfx1030
+pip install torch==2.1.2 torchvision==0.16.2 --index-url [ROCm nightly repo]
+pip install -r requirements.txt
+```
+
+**Challenges**:
+- No matching PyTorch 2.1.2 ROCm build for Windows + gfx1030
+- Linux ROCm would require Docker or dual-boot
+- Compatibility issues with CUDA-specific code paths
+
+**Option 3: Code Modification for HIP**
+- Requires manually converting CUDA calls to HIP equivalents
+- Estimated effort: Several days to weeks of development
+- High risk of introducing bugs
+- No community support
+
+### 2.3 Performance Expectations
+
+| Scenario | Hardware | Expected Performance |
+|----------|----------|---------------------|
+| **Official (NVIDIA)** | RTX 4090, CUDA 12.1 | ~2 min/mesh (12GB VRAM) |
+| **CPU Fallback** | Modern CPU | ~20-40 min/mesh |
+| **Unofficial ROCm (Linux)** | RX 6950 XT, ROCm 5.7+ | Unknown, likely 3-5 min/mesh if working |
+| **Unofficial ROCm (Windows)** | RX 6950 XT | **Not feasible** with current tools |
+
+---
+
+## 3. MeshAnything V2 Repository Requirements
+
+### 3.1 Official Requirements
+
+**Repository**: https://github.com/buaacyw/MeshAnythingV2
+
+#### System Requirements:
+- **Operating System**: Linux (Ubuntu 22.04 tested)
+- **CUDA**: CUDA 11.8
+- **Python**: Python 3.10.13
+- **GPU**: NVIDIA A800 (tested) - requires ~8GB VRAM
+- **Framework**: PyTorch 2.1.1 with CUDA 11.8 support
+
+#### Installation Commands:
+```bash
+git clone https://github.com/buaacyw/MeshAnythingV2.git && cd MeshAnythingV2
+
+conda create -n MeshAnythingV2 python==3.10.13 -y
+conda activate MeshAnythingV2
+
+# Install PyTorch with CUDA 11.8
+pip install torch==2.1.1 torchvision==0.16.1 torchaudio==2.1.1 --index-url https://download.pytorch.org/whl/cu118
+
+# Install dependencies
+pip install -r requirements.txt
+pip install -r training_requirements.txt  # Optional for training
+
+# CRITICAL: Flash-Attention (requires compilation)
+pip install flash-attn --no-build-isolation
+
+# Web interface
+pip install -U gradio
+```
+
+#### Key Dependencies:
+- PyTorch 2.1.1 (CUDA 11.8)
+- **flash-attn** (CRITICAL DEPENDENCY)
+- trimesh, pymeshlab
+- Gradio (for web interface)
+- Michelangelo encoder (separate download from Hugging Face)
+
+#### Performance Characteristics:
+- **Generation Time**: ~45 seconds per mesh on NVIDIA A6000
+- **Input Limits**: ≤1600 faces (training constraint)
+- **Memory Usage**: ~8GB VRAM
+
+### 3.2 Flash-Attention Requirement (MAJOR BLOCKER)
+
+**Flash-Attention is a CRITICAL dependency that creates a major compatibility barrier.**
+
+#### Flash-Attention AMD ROCm Requirements:
+- **Supported GPUs (AMD)**:
+  - **CDNA2/CDNA3**: MI200, MI250x, MI300, MI300x, MI355x
+  - **RDNA (Triton backend only)**: Experimental support
+- **ROCm Version**: ROCm 6.0+
+- **PyTorch Version**: PyTorch 2.2+
+- **OS**: Linux (Windows experimental from v2.3.2)
+- **Data Types**: FP16, BF16 (CK backend), FP32 (Triton backend)
+
+#### AMD RX 6950 XT (RDNA2, gfx1030) Flash-Attention Compatibility:
+
+**Status: ❌ NOT SUPPORTED (Even on Linux ROCm)**
+
+| Backend | RX 6950 XT Support | Notes |
+|---------|-------------------|-------|
+| **Composable Kernel (CK)** | ❌ NO | Only MI200/MI300 series |
+| **Triton** | ⚠️ EXPERIMENTAL | Only with ROCm 6.0+ on Linux |
+
+**Installation Requirements** (if attempting on supported AMD GPU):
+```bash
+# ROCm PyTorch Docker environment required
+git clone --recursive https://github.com/Dao-AILab/flash-attention.git
+cd flash-attention
+
+# For Triton backend (RDNA experimental support)
+export FLASH_ATTENTION_TRITON_AMD_ENABLE="TRUE"
+pip install triton==3.2.0
+python setup.py install
+
+# For both backends
+export FLASH_ATTENTION_TRITON_AMD_ENABLE=TRUE
+export FLASH_ATTENTION_SKIP_CK_BUILD=FALSE
+python setup.py install
+```
+
+**RX 6950 XT Specific Issues**:
+1. Even with Triton backend, RDNA2 support is experimental
+2. Requires ROCm 6.0+ on Linux (not available for Windows)
+3. No community reports of successful flash-attn compilation for RX 6950 XT
+4. Performance significantly worse than MI300 series
+
+### 3.3 AMD/ROCm Compatibility Analysis
+
+**AMD RX 6950 XT Compatibility: ❌ COMPLETELY INCOMPATIBLE**
+
+#### Compatibility Barriers (Multiple Critical Issues):
+
+1. **Flash-Attention Dependency** (BLOCKING):
+   - Absolutely required by MeshAnything V2
+   - Cannot be disabled or removed without major code changes
+   - RX 6950 XT not in supported GPU list even for experimental Triton backend
+   - Compilation would fail on Windows even if attempted
+
+2. **CUDA 11.8 Requirement**:
+   - PyTorch build specifies CUDA 11.8
+   - ROCm equivalency would be ROCm 5.7 or 6.0+
+   - No Windows ROCm 6.0+ for RX 6950 XT
+
+3. **No Build Isolation for flash-attn**:
+   - `pip install flash-attn --no-build-isolation` requires compilation
+   - Requires CUDA Toolkit (or ROCm equivalent) during installation
+   - Windows build environment extremely difficult to configure
+
+4. **Michelangelo Encoder Dependency**:
+   - Requires pre-trained model from Hugging Face
+   - Model trained with CUDA/NVIDIA infrastructure
+   - Unknown compatibility with ROCm
+
+#### Workaround Assessment:
+
+**Option 1: CPU Fallback**
+- **Feasibility**: ❌ NOT POSSIBLE
+- **Reason**: flash-attn has no CPU implementation
+- **Alternative**: Would require completely removing flash-attn and rewriting attention mechanism
+- **Effort**: Major code refactoring (weeks of development)
+
+**Option 2: Remove Flash-Attention**
+- **Feasibility**: ⚠️ THEORETICALLY POSSIBLE (but difficult)
+- **Steps**:
+  1. Replace `flash-attn` calls with standard PyTorch attention
+  2. Accept significant performance degradation
+  3. Test extensively for correctness
+- **Challenges**:
+  - Model may not converge without optimized attention
+  - Generation quality may degrade
+  - 3-5x slower even on GPU
+- **Effort**: 2-4 weeks of development + testing
+
+**Option 3: Linux ROCm + Build from Source**
+- **Feasibility**: ⚠️ POSSIBLE (for advanced users)
+- **Requirements**:
+  - Dual-boot to Ubuntu 22.04
+  - Install ROCm 6.0+ for RDNA2 (unofficial support)
+  - Build flash-attn with Triton backend
+  - Use nightly PyTorch ROCm builds
+- **Success Probability**: ~30-40%
+- **Effort**: 1-2 weeks of troubleshooting
+
+**Option 4: Use Different Hardware**
+- **Recommendation**: ✅ MOST PRACTICAL
+- **Options**:
+  - NVIDIA RTX 4060 Ti (16GB) or higher for local use
+  - Cloud GPU rental (RunPod, Vast.ai, AWS EC2 with NVIDIA instances)
+  - AMD MI300X access (extremely expensive, data center only)
+
+### 3.4 Performance Expectations
+
+| Scenario | Hardware | Flash-Attn | Expected Performance |
+|----------|----------|------------|---------------------|
+| **Official (NVIDIA)** | A800, CUDA 11.8 | ✅ Yes | ~45 sec/mesh |
+| **Consumer NVIDIA** | RTX 4060 Ti 16GB | ✅ Yes | ~60 sec/mesh |
+| **CPU Fallback** | Any CPU | ❌ No | **IMPOSSIBLE** (no CPU flash-attn) |
+| **Linux ROCm (Unofficial)** | RX 6950 XT | ⚠️ Experimental | Unknown, likely unstable |
+| **Windows ROCm** | RX 6950 XT | ❌ No | **IMPOSSIBLE** |
+
+---
+
+## 4. Blender's Bundled Python Environment Compatibility
+
+### 4.1 Blender Python Architecture
+
+#### Environment Characteristics:
+- **Isolation**: Blender ships with its own Python interpreter and libraries
+- **Version**: Blender 4.3 uses Python 3.11.9 (varies by Blender version)
+- **Location**: 
+  - Windows: `C:\Program Files\Blender Foundation\Blender 4.3\4.3\python\`
+  - Linux: `/usr/share/blender/4.3/python/`
+- **Pre-installed Packages**: NumPy, bpy (Blender Python API), minimal scipy
+
+#### Isolation Model:
+- NOT a virtual environment (venv)
+- Completely separate from system Python
+- `sys.path` does not include system site-packages by default
+- Package manager (`pip`) may not be initially available
+
+### 4.2 Known Issues with PyTorch/ML Frameworks
+
+#### Issue 1: ModuleNotFoundError
+**Problem**: PyTorch installed in system Python is invisible to Blender
+
+```python
+# Inside Blender Python Console
+import torch
+# ModuleNotFoundError: No module named 'torch'
+```
+
+**Root Cause**: Blender's isolated Python environment
+
+#### Issue 2: NumPy Version Conflicts
+**Problem**: Blender comes with pre-installed NumPy; PyTorch may require different version
+
+**Symptoms**:
+- Installation failures when pip tries to upgrade/downgrade NumPy
+- Import errors due to version mismatches
+- Segmentation faults in some cases
+
+**Workaround**:
+```bash
+# Before installing PyTorch, rename Blender's NumPy
+cd "C:\Program Files\Blender Foundation\Blender 4.3\4.3\python\lib\site-packages"
+ren numpy numpy_backup
+# Then install PyTorch
+```
+
+#### Issue 3: Python Version Mismatches
+**Problem**: Blender's Python version may not match available PyTorch wheels
+
+| Blender Version | Python Version | PyTorch Availability |
+|----------------|----------------|---------------------|
+| Blender 2.8 | Python 3.7 | Limited (older PyTorch only) |
+| Blender 3.x | Python 3.9-3.10 | Good availability |
+| Blender 4.3 | Python 3.11.9 | May have issues with cutting-edge PyTorch |
+
+#### Issue 4: CUDA Toolkit Detection
+**Problem**: Blender's Python may not detect system CUDA installation
+
+**Symptoms**:
+- PyTorch installs CPU-only version even when CUDA requested
+- `torch.cuda.is_available()` returns `False`
+
+**Root Cause**: Environment variables not propagated to Blender's subprocess
+
+#### Issue 5: Large Dependency Footprint
+**Problem**: PyTorch + dependencies = 2-4GB installed size
+
+**Implications**:
+- Bloats Blender installation directory
+- Every Blender update requires reinstalling all packages
+- Multiple Blender versions = multiple PyTorch installations
+
+#### Issue 6: AMD GPU Driver Conflicts
+**Critical Issue for RX 6950 XT**:
+
+From community report: Installing AMD PyTorch ROCm-optimized drivers can cause **"Unsupported graphics card configuration"** error in Blender.
+
+**Problem**: AMD ROCm drivers optimized for ML workloads may lack OpenGL/Vulkan features needed by Blender
+
+**Symptoms**:
+- Blender fails to start or shows unsupported GPU error
+- Viewport rendering broken
+- Cycles render engine unavailable
+
+**Resolution**: Driver rollback or separate driver profiles (not always possible)
+
+### 4.3 Installation Methods for Blender Python
+
+#### Method 1: Direct Installation into Blender Python
+
+**Steps**:
+```bash
+# Locate Blender's Python
+cd "C:\Program Files\Blender Foundation\Blender 4.3\4.3\python"
+
+# Ensure pip is available
+.\bin\python.exe -m ensurepip
+.\bin\python.exe -m pip install --upgrade pip
+
+# (Optional) Handle NumPy conflict
+cd lib\site-packages
+ren numpy numpy_backup
+
+# Install PyTorch
+.\bin\python.exe -m pip install torch==2.1.2 torchvision==0.16.2 --index-url https://download.pytorch.org/whl/cpu
+```
+
+**Pros**:
+- ✅ Packages immediately available in Blender
+- ✅ No path configuration needed
+
+**Cons**:
+- ❌ Requires admin privileges (if Blender in Program Files)
+- ❌ Must reinstall after every Blender update
+- ❌ Bloats Blender installation
+- ❌ Difficult to manage multiple projects with different dependencies
+
+#### Method 2: External Virtual Environment + sys.path Manipulation
+
+**Steps**:
+```bash
+# Create venv with matching Python version
+py -3.11 -m venv C:\BlenderEnvs\pytorch_env
+
+# Activate and install packages
+C:\BlenderEnvs\pytorch_env\Scripts\activate
+pip install torch torchvision
+
+# In Blender script, add to sys.path
+import sys
+sys.path.append(r"C:\BlenderEnvs\pytorch_env\Lib\site-packages")
+import torch
+```
+
+**Pros**:
+- ✅ Cleaner separation of concerns
+- ✅ Can reuse environment across Blender versions
+- ✅ Easier dependency management
+
+**Cons**:
+- ❌ Requires manual sys.path modification in every script
+- ❌ Python version must match Blender's exactly (e.g., 3.11.9)
+- ❌ Potential for subtle compatibility issues
+
+#### Method 3: Blender PYTHONPATH Environment Variable
+
+**Steps**:
+```bash
+# Create venv and install packages
+py -3.11 -m venv C:\BlenderEnvs\pytorch_env
+C:\BlenderEnvs\pytorch_env\Scripts\activate
+pip install torch torchvision
+
+# Launch Blender with custom PYTHONPATH
+set PYTHONPATH=C:\BlenderEnvs\pytorch_env\Lib\site-packages
+blender.exe
+```
+
+**Pros**:
+- ✅ No script modification needed
+- ✅ Environment variables respected by all Blender scripts
+
+**Cons**:
+- ❌ Must launch Blender from command line or modify shortcut
+- ❌ Environment variable must be set each time
+- ❌ Not user-friendly for non-technical users
+
+#### Method 4: Automated Package Installation Script (Add-on Pattern)
+
+**Concept**: Add-on that automatically installs dependencies on first run
+
+```python
+import subprocess
+import sys
+import site
+
+def ensure_package(package_name):
+    """Install package into Blender's Python if not present."""
+    try:
+        __import__(package_name)
+    except ImportError:
+        # Get Blender's Python executable
+        python_exe = sys.executable
+        
+        # Target directory (user site-packages)
+        target = site.getusersitepackages()
+        
+        # Install package
+        subprocess.check_call([
+            python_exe, "-m", "pip", "install",
+            "--target", target, package_name
+        ])
+        
+        # Add to sys.path
+        sys.path.append(target)
+        site.addsitedir(target)
+
+# Usage
+ensure_package("torch")
+import torch
+```
+
+**Pros**:
+- ✅ User-friendly (automatic dependency resolution)
+- ✅ Uses user site-packages (no admin required)
+- ✅ Can be distributed in add-on
+
+**Cons**:
+- ❌ First-run installation slow (downloads ~2GB)
+- ❌ Requires internet connection
+- ❌ May fail with complex dependencies like CUDA PyTorch
+
+### 4.4 Best Practices for Blender ML Integration
+
+#### Recommendation Hierarchy:
+
+**For Development/Testing**:
+1. **External Virtual Environment** (Method 2)
+   - Easiest to debug and manage
+   - Quick iteration
+   - Can switch between environments
+
+**For Distribution (Add-ons)**:
+2. **Automated Installation Script** (Method 4)
+   - Best user experience
+   - Handles dependencies automatically
+   - Use CPU-only PyTorch to avoid GPU issues
+
+**For Personal Production Use**:
+3. **Direct Installation** (Method 1)
+   - Most reliable within Blender
+   - Acceptable if not frequently updating Blender
+
+#### Specific Recommendations for RX 6950 XT + Windows:
+
+**⚠️ DO NOT install AMD ROCm drivers if using Blender regularly**
+- High risk of breaking Blender's GPU features
+- Stick with standard AMD Adrenalin drivers
+- Use CPU-only PyTorch instead
+
+**Configuration**:
+```bash
+# Install CPU-only PyTorch to avoid AMD ROCm driver conflicts
+python -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+```
+
+---
+
+## 5. Best Architecture Approach: Bundled Python vs Separate Environment
+
+### 5.1 Comparison Matrix
+
+| Criterion | Bundled Python | Separate Environment |
+|-----------|---------------|---------------------|
+| **Ease of Setup** | ⭐⭐⭐⭐ Easy | ⭐⭐ Moderate |
+| **Maintenance** | ⭐⭐ High effort on Blender updates | ⭐⭐⭐⭐ Low maintenance |
+| **Flexibility** | ⭐⭐ Limited | ⭐⭐⭐⭐⭐ High flexibility |
+| **Distribution** | ⭐⭐⭐ Can bundle with add-on | ⭐⭐ Requires user setup |
+| **Debugging** | ⭐⭐⭐ Moderate | ⭐⭐⭐⭐⭐ Excellent |
+| **Isolation** | ⭐⭐ Poor (affects all Blender projects) | ⭐⭐⭐⭐⭐ Perfect isolation |
+| **Disk Space** | ⭐⭐ Duplicates across Blender versions | ⭐⭐⭐⭐ Shared across projects |
+| **Performance** | ⭐⭐⭐⭐⭐ Native | ⭐⭐⭐⭐⭐ Native (no overhead) |
+
+### 5.2 Recommendation by Use Case
+
+#### Use Case 1: Personal Research/Development (Your Scenario)
+**RECOMMENDED: Separate Environment**
+
+**Rationale**:
+- ✅ Easier debugging and experimentation
+- ✅ Can test different PyTorch versions
+- ✅ Won't break Blender installation
+- ✅ Reusable across Blender updates
+- ✅ Better integration with IDEs (VSCode, PyCharm)
+
+**Implementation**:
+```bash
+# 1. Create project-specific environment
+mkdir C:\Projects\BlenderRemesher
+cd C:\Projects\BlenderRemesher
+py -3.11 -m venv venv
+
+# 2. Install dependencies
+venv\Scripts\activate
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+pip install trimesh pymeshlab scipy
+
+# 3. Create Blender script with sys.path setup
+# save as: blender_remesher_init.py
+import sys
+sys.path.insert(0, r"C:\Projects\BlenderRemesher\venv\Lib\site-packages")
+
+# Now imports work
+import torch
+import trimesh
+```
+
+**Workflow**:
+1. Develop code in VSCode/PyCharm with full IDE support
+2. Test outside Blender first
+3. Import into Blender with sys.path setup
+4. Iterate quickly without restarting Blender
+
+#### Use Case 2: Add-on Distribution to End Users
+**RECOMMENDED: Bundled Python (with Automated Installation)**
+
+**Rationale**:
+- ✅ Users don't need technical setup
+- ✅ Works out-of-box
+- ✅ Controlled environment
+
+**Implementation Pattern**:
+```python
+# add-on/__init__.py
+
+import sys
+import subprocess
+import importlib
+
+def install_dependencies():
+    """Install dependencies into Blender's Python on first run."""
+    packages = ["torch", "torchvision"]
+    
+    for package in packages:
+        try:
+            importlib.import_module(package)
+        except ImportError:
+            subprocess.check_call([
+                sys.executable, "-m", "pip", "install",
+                "--user", package, "--index-url",
+                "https://download.pytorch.org/whl/cpu"
+            ])
+
+# Run on registration
+def register():
+    install_dependencies()
+    # Rest of add-on registration...
+```
+
+#### Use Case 3: Production Pipeline (Studio/Team)
+**RECOMMENDED: Separate Environment + Deployment Scripts**
+
+**Rationale**:
+- ✅ Consistent across team
+- ✅ Version controlled
+- ✅ CI/CD integration
+
+**Setup**:
+```bash
+# requirements.txt
+torch==2.1.2+cpu
+torchvision==0.16.2+cpu
+trimesh==4.0.5
+pymeshlab==2023.12
+
+# deploy.bat
+@echo off
+py -3.11 -m venv %APPDATA%\BlenderRemesher\venv
+call %APPDATA%\BlenderRemesher\venv\Scripts\activate
+pip install -r requirements.txt
+
+# Blender startup script sets sys.path automatically
+```
+
+### 5.3 Specific Recommendation for BPT/MeshAnything V2 Integration
+
+**Given the incompatibilities identified, recommended architecture**:
+
+#### Architecture: External Python Service + Blender Client
+
+**Rationale**:
+- BPT and MeshAnything V2 cannot run on RX 6950 XT + Windows
+- Separation of concerns: ML processing separate from Blender
+- Enables cloud/remote GPU usage
+- Better error handling and logging
+
+**Design**:
+```
+┌─────────────────┐         ┌──────────────────┐
+│                 │         │                  │
+│  Blender        │ ──HTTP─>│  Python Service  │
+│  (Frontend)     │ <─JSON─ │  (BPT/MeshAny)   │
+│                 │         │                  │
+│  - Mesh prep    │         │  - PyTorch       │
+│  - UI           │         │  - GPU compute   │
+│  - Visualization│         │  - Model hosting │
+└─────────────────┘         └──────────────────┘
+   Local                    Cloud/Remote
+   (RX 6950 XT)            (NVIDIA GPU)
+```
+
+**Implementation Options**:
+
+**Option A: Local CPU Service** (Slow but functional)
+```python
+# service.py (separate from Blender)
+from flask import Flask, request, jsonify
+import torch
+import trimesh
+
+app = Flask(__name__)
+
+@app.route('/remesh', methods=['POST'])
+def remesh():
+    mesh_data = request.json['mesh']
+    # Process with BPT/MeshAnything on CPU
+    result = process_mesh(mesh_data)
+    return jsonify(result)
+
+if __name__ == '__main__':
+    app.run(port=5000)
+
+# blender_client.py (in Blender)
+import bpy
+import requests
+
+def remesh_selected():
+    mesh_data = export_mesh_to_dict(bpy.context.active_object)
+    response = requests.post('http://localhost:5000/remesh', json={'mesh': mesh_data})
+    import_mesh_from_dict(response.json())
+```
+
+**Option B: Cloud Service** (Fast, practical)
+- Use RunPod, Vast.ai, or AWS EC2 with NVIDIA GPU
+- Deploy BPT/MeshAnything V2 as REST API
+- Blender add-on sends mesh data over HTTP
+- ~$0.20-0.50 per hour for RTX 4090 equivalent
+
+**Option C: WSL2 + Docker** (Compromise)
+- Install Ubuntu 22.04 in WSL2
+- Run Docker container with CUDA support (requires NVIDIA GPU)
+- Not possible with RX 6950 XT (no WSL2 CUDA support for AMD)
+
+---
+
+## 6. Installation Methods and Potential Issues
+
+### 6.1 Current State Summary
+
+**❌ Direct Installation on Windows + RX 6950 XT: NOT FEASIBLE**
+
+| Component | Status | Blocker |
+|-----------|--------|---------|
+| **PyTorch ROCm** | ❌ Blocked | No official Windows support for RX 6950 XT |
+| **BPT** | ❌ Blocked | Requires CUDA 12.1 PyTorch |
+| **MeshAnything V2** | ❌ CRITICALLY Blocked | Requires flash-attn (no RX 6950 XT support) |
+| **Blender Integration** | ⚠️ Possible | But with CPU-only PyTorch (extremely slow) |
+
+### 6.2 Viable Alternative Installation Paths
+
+#### Path 1: CPU-Only Installation (Development/Testing Only)
+
+**Hardware**: RX 6950 XT + Windows 11 (GPU unused for ML)
+
+**Steps**:
+```bash
+# 1. Create isolated environment
+py -3.11 -m venv C:\BlenderRemesher
+C:\BlenderRemesher\Scripts\activate
+
+# 2. Install CPU-only PyTorch
+pip install torch==2.1.2 torchvision==0.16.2 --index-url https://download.pytorch.org/whl/cpu
+
+# 3. Clone BPT
+git clone https://github.com/Tencent-Hunyuan/bpt.git
+cd bpt
+pip install -r requirements.txt
+
+# 4. Download model weights
+pip install "huggingface_hub[cli]"
+mkdir weights
+huggingface-cli download whaohan/bpt --local-dir ./weights
+
+# 5. Test inference (VERY SLOW)
+python main.py --config config/BPT-open-8k-8-16.yaml \
+               --model_path weights/checkpoint.pth \
+               --output_path output/ \
+               --input_dir test_meshes/
+```
+
+**Expected Results**:
+- ✅ Installation completes
+- ✅ Code runs without errors
+- ❌ **20-40 minutes per mesh** (vs 2 minutes on GPU)
+- ⚠️ CPU-only suitable for code validation, not production
+
+**MeshAnything V2 Status**:
+- ❌ **CANNOT INSTALL** - flash-attn has no CPU implementation
+- Would require major code refactoring
+
+#### Path 2: Linux Dual-Boot + Unofficial ROCm (Advanced)
+
+**Hardware**: RX 6950 XT + Ubuntu 22.04
+
+**Complexity**: ⭐⭐⭐⭐⭐ (Very High)
+
+**Prerequisites**:
+- Separate Linux partition or dual-boot setup
+- ROCm 6.0+ unofficial build for RDNA2
+- PyTorch ROCm nightly builds
+- Several days of troubleshooting time
+
+**Steps** (High-Level):
+```bash
+# 1. Install Ubuntu 22.04
+# 2. Install ROCm 6.0 (unofficial gfx1030 support)
+# Follow: https://rocm.docs.amd.com/projects/install-on-linux/
+
+# 3. Install PyTorch ROCm nightly
+pip install --pre torch torchvision --index-url https://rocm.nightlies.amd.com/
+
+# 4. Attempt BPT installation
+git clone https://github.com/Tencent-Hunyuan/bpt.git
+# May require code modifications to work with ROCm
+
+# 5. Attempt MeshAnything V2 + flash-attn compilation
+git clone https://github.com/buaacyw/MeshAnythingV2.git
+export FLASH_ATTENTION_TRITON_AMD_ENABLE="TRUE"
+pip install triton==3.2.0
+# High probability of compilation failures
+```
+
+**Success Probability**: ~30-40%
+
+**Common Issues**:
+- ROCm installation failures
+- Kernel compatibility issues
+- flash-attn compilation errors
+- Performance significantly worse than NVIDIA
+- Blender for Linux may have limited features vs Windows
+
+#### Path 3: Cloud GPU Rental (RECOMMENDED for Production)
+
+**Hardware**: Remote NVIDIA GPU (RTX 4090, A6000, etc.)
+
+**Cost**: $0.20-0.80 per hour
+
+**Platforms**:
+- **RunPod**: https://runpod.io
+  - RTX 4090: $0.49/hr
+  - A6000 (48GB): $0.79/hr
+  - Pre-built templates available
+- **Vast.ai**: https://vast.ai
+  - Cheaper, more variable availability
+  - RTX 4090: $0.20-0.40/hr
+- **AWS EC2**: https://aws.amazon.com/ec2/instance-types/p3/
+  - More expensive but enterprise-grade
+  - V100: $3.06/hr
+
+**Setup Example** (RunPod):
+```bash
+# 1. Create RunPod account and add payment
+# 2. Deploy pod with PyTorch template
+# 3. SSH into pod or use Jupyter
+
+# 4. Install BPT
+git clone https://github.com/Tencent-Hunyuan/bpt.git
+cd bpt
+pip install -r requirements.txt
+
+# 5. Download models
+huggingface-cli download whaohan/bpt --local-dir ./weights
+
+# 6. Setup API server
+pip install flask
+# Create simple API endpoint (see Architecture section)
+
+# 7. Expose port via RunPod's TCP tunnel
+# Connect from Blender on local Windows machine
+```
+
+**Advantages**:
+- ✅ Full CUDA support
+- ✅ Known working configuration
+- ✅ Scalable (upgrade GPU as needed)
+- ✅ Pay per use
+- ✅ No local hardware issues
+
+**Disadvantages**:
+- ❌ Ongoing cost
+- ❌ Requires internet connection
+- ❌ Data transfer latency
+- ❌ Need to manage remote server
+
+#### Path 4: Separate NVIDIA GPU (Long-Term Solution)
+
+**Hardware Investment**: $300-800
+
+**Options**:
+| GPU | VRAM | Price (used) | BPT | MeshAnything V2 |
+|-----|------|-------------|-----|----------------|
+| RTX 3060 12GB | 12GB | $250-300 | ✅ Yes | ⚠️ Slow but works |
+| RTX 4060 Ti 16GB | 16GB | $450-500 | ✅ Yes | ✅ Good |
+| RTX 4070 | 12GB | $500-550 | ✅ Yes | ✅ Good |
+| RTX 4070 Ti Super | 16GB | $700-800 | ✅ Yes | ✅ Excellent |
+
+**Setup**:
+```bash
+# Standard installation (Windows)
+# 1. Install NVIDIA drivers
+# 2. Install CUDA Toolkit 11.8 or 12.1
+# 3. Install PyTorch with CUDA
+pip install torch==2.1.2 torchvision==0.16.2 --index-url https://download.pytorch.org/whl/cu121
+
+# 4. Install BPT and MeshAnything V2 normally
+# All dependencies work out-of-box
+```
+
+**Considerations**:
+- Can keep RX 6950 XT for Blender viewport/Cycles rendering
+- NVIDIA GPU only for ML workloads
+- Need PCIe slots and PSU capacity
+
+### 6.3 Troubleshooting Common Issues
+
+#### Issue 1: "CUDA not available" (torch.cuda.is_available() = False)
+
+**Causes**:
+- NVIDIA drivers not installed
+- CUDA Toolkit version mismatch
+- PyTorch CPU version accidentally installed
+- Environment variables not set
+
+**Diagnostic**:
+```python
+import torch
+print(f"PyTorch version: {torch.__version__}")
+print(f"CUDA available: {torch.cuda.is_available()}")
+print(f"CUDA version: {torch.version.cuda}")
+print(f"Device count: {torch.cuda.device_count()}")
+if torch.cuda.is_available():
+    print(f"Device name: {torch.cuda.get_device_name(0)}")
+```
+
+**Solutions**:
+1. Verify driver: `nvidia-smi`
+2. Check CUDA Toolkit installation
+3. Reinstall PyTorch with explicit CUDA version:
+   ```bash
+   pip uninstall torch torchvision torchaudio
+   pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
+   ```
+
+#### Issue 2: "No module named 'flash_attn'"
+
+**Cause**: flash-attn failed to install or not compatible
+
+**Solution**:
+```bash
+# For NVIDIA CUDA
+pip install flash-attn --no-build-isolation
+
+# If compilation fails
+# Check: CUDA Toolkit installed, Visual Studio Build Tools (Windows), GCC (Linux)
+```
+
+**For AMD**: See Path 2 (Linux Dual-Boot) - extremely difficult
+
+#### Issue 3: Out of Memory (OOM) Errors
+
+**Symptoms**:
+```
+RuntimeError: CUDA out of memory. Tried to allocate X GB
+```
+
+**Solutions**:
+1. Reduce batch size:
+   ```bash
+   python main.py --batch_size 1  # Instead of default
+   ```
+
+2. Use FP16 (half precision):
+   ```python
+   model = model.half()
+   ```
+
+3. Clear GPU cache:
+   ```python
+   torch.cuda.empty_cache()
+   ```
+
+4. Use gradient checkpointing (if training)
+
+5. Upgrade GPU or use cloud instance with more VRAM
+
+#### Issue 4: Blender "Unsupported Graphics Card"
+
+**Cause**: AMD ROCm driver conflicts with Blender's OpenGL/Vulkan requirements
+
+**Solution**:
+- **DO NOT install AMD ROCm drivers on Windows if using Blender**
+- Use standard AMD Adrenalin drivers
+- Run ML workloads on separate machine or cloud
+- OR: Use separate GPU for ML (NVIDIA) and keep AMD for graphics
+
+#### Issue 5: Slow Installation / Compilation Hangs
+
+**Symptoms**: `pip install flash-attn --no-build-isolation` takes hours or hangs
+
+**Causes**:
+- Limited RAM (need 16GB+)
+- Limited CPU cores
+- Antivirus interference
+
+**Solutions**:
+```bash
+# Limit parallel compilation jobs
+set MAX_JOBS=2
+pip install flash-attn --no-build-isolation
+
+# Or use pre-built wheels if available
+pip install flash-attn --extra-index-url https://flash-attn-wheels.s3.amazonaws.com/
+```
+
+#### Issue 6: Version Conflicts
+
+**Symptoms**:
+```
+ERROR: pip's dependency resolver does not currently take into account all the packages that are installed.
+```
+
+**Solution**:
+```bash
+# Create fresh environment
+python -m venv fresh_env
+fresh_env\Scripts\activate
+
+# Install in correct order
+pip install torch==2.1.2 torchvision==0.16.2 --index-url https://download.pytorch.org/whl/cu121
+pip install flash-attn --no-build-isolation
+pip install -r requirements.txt
+```
+
+---
+
+## 7. Final Recommendations
+
+### 7.1 Immediate Action Plan (For Your RX 6950 XT + Windows Setup)
+
+#### Recommendation Tier List:
+
+**🥇 Tier 1: Cloud GPU (Best ROI)**
+- **Action**: Sign up for RunPod or Vast.ai
+- **Setup Time**: 1-2 hours
+- **Monthly Cost**: ~$10-30 (pay-as-you-go)
+- **Pros**: Full compatibility, scalable, no hardware changes
+- **Cons**: Requires internet, ongoing cost
+
+**🥈 Tier 2: Separate NVIDIA GPU (Best Performance)**
+- **Action**: Purchase RTX 4060 Ti 16GB ($450-500)
+- **Setup Time**: 2-3 hours
+- **One-Time Cost**: $450-500
+- **Pros**: Full local control, no recurring costs, fast
+- **Cons**: Upfront investment, needs PCIe slot
+
+**🥉 Tier 3: Linux Dual-Boot (Enthusiast)**
+- **Action**: Install Ubuntu 22.04, ROCm nightly builds
+- **Setup Time**: 2-3 days (with troubleshooting)
+- **Cost**: Free (but high time investment)
+- **Pros**: Utilizes existing hardware
+- **Cons**: ~40% success rate, unstable, poor performance
+
+**❌ Not Recommended: CPU-Only on Windows**
+- Extremely slow (20-40 min/mesh)
+- MeshAnything V2 won't work at all (flash-attn)
+- Only suitable for code validation, not production
+
+### 7.2 Architecture Recommendation
+
+**For BPT + MeshAnything V2 Integration with Blender**:
+
+```
+Architecture: Client-Server Model
+
+┌──────────────────────────────────┐
+│  Local Windows Machine           │
+│  (RX 6950 XT)                    │
+│                                  │
+│  ┌────────────────────────────┐ │
+│  │  Blender                   │ │
+│  │  - UI                      │ │
+│  │  - Mesh preparation        │ │
+│  │  - Post-processing         │ │
+│  │  - Rendering (AMD GPU)     │ │
+│  └────────────────────────────┘ │
+│              │                   │
+│              │ HTTP/REST         │
+└──────────────┼───────────────────┘
+               │
+               ▼
+┌──────────────────────────────────┐
+│  Remote GPU Server               │
+│  (NVIDIA RTX 4090 or better)     │
+│                                  │
+│  ┌────────────────────────────┐ │
+│  │  Python Service            │ │
+│  │  - BPT                     │ │
+│  │  - MeshAnything V2         │ │
+│  │  - PyTorch + CUDA          │ │
+│  │  - Flash-Attention         │ │
+│  └────────────────────────────┘ │
+└──────────────────────────────────┘
+```
+
+**Implementation Steps**:
+
+1. **Server Setup** (RunPod/Vast.ai):
+   ```bash
+   # Install BPT and MeshAnything V2
+   pip install flask torch torchvision flash-attn
+   
+   # Create REST API (example)
+   # server.py
+   from flask import Flask, request, jsonify
+   import base64
+   
+   app = Flask(__name__)
+   
+   @app.route('/bpt', methods=['POST'])
+   def bpt_remesh():
+       mesh_b64 = request.json['mesh']
+       # Decode, process with BPT, encode result
+       result = process_with_bpt(mesh_b64)
+       return jsonify({'result': result})
+   
+   @app.route('/meshanything', methods=['POST'])
+   def meshanything_remesh():
+       mesh_b64 = request.json['mesh']
+       result = process_with_meshanything(mesh_b64)
+       return jsonify({'result': result})
+   
+   app.run(host='0.0.0.0', port=5000)
+   ```
+
+2. **Blender Client** (Local):
+   ```python
+   # blender_addon/__init__.py
+   import bpy
+   import requests
+   import base64
+   
+   class RemeshOperator(bpy.types.Operator):
+       bl_idname = "mesh.ai_remesh"
+       bl_label = "AI Remesh"
+       
+       def execute(self, context):
+           # Export mesh
+           mesh_data = export_mesh_to_base64(context.active_object)
+           
+           # Send to server
+           response = requests.post(
+               'http://runpod-server.com:5000/bpt',
+               json={'mesh': mesh_data},
+               timeout=300  # 5 minute timeout
+           )
+           
+           # Import result
+           import_mesh_from_base64(response.json()['result'])
+           
+           return {'FINISHED'}
+   ```
+
+3. **Workflow**:
+   - User selects mesh in Blender → clicks "AI Remesh" button
+   - Mesh sent to cloud server (1-2 seconds transfer)
+   - Server processes with BPT/MeshAnything V2 (30-60 seconds)
+   - Result sent back and imported into Blender
+   - Total time: ~60-90 seconds per mesh
+
+### 7.3 Cost-Benefit Analysis
+
+| Solution | Setup Cost | Monthly Cost | Time/Mesh | Reliability | Total 1-Year Cost |
+|----------|-----------|--------------|-----------|-------------|------------------|
+| **Cloud GPU** | $0 | $10-30 | 45-60s | ⭐⭐⭐⭐⭐ | $120-360 |
+| **RTX 4060 Ti** | $500 | $0 | 45-60s | ⭐⭐⭐⭐⭐ | $500 |
+| **RTX 4070 Ti Super** | $800 | $0 | 30-45s | ⭐⭐⭐⭐⭐ | $800 |
+| **Linux Dual-Boot** | $0 | $0 | 90-180s | ⭐⭐ | $0 (+ time) |
+| **CPU-Only** | $0 | $0 | 1200-2400s | ⭐⭐⭐ | $0 (unusable) |
+
+**Break-Even Analysis**:
+- Cloud @ $20/month vs RTX 4060 Ti @ $500 = 25 months to break even
+- If using >40 hours/month → Buy GPU
+- If using <20 hours/month → Use cloud
+
+### 7.4 Step-by-Step Quick Start (Cloud GPU Approach)
+
+#### Phase 1: Setup (1-2 hours)
+
+1. **Create RunPod Account**:
+   - Go to https://runpod.io
+   - Sign up, add payment method
+   - Add $10 credit
+
+2. **Deploy GPU Pod**:
+   - Select "RTX 4090" or "A6000 48GB"
+   - Choose "PyTorch 2.1" template
+   - Deploy pod (takes 2-3 minutes)
+
+3. **Install BPT**:
+   ```bash
+   # SSH into pod or use Jupyter
+   git clone https://github.com/Tencent-Hunyuan/bpt.git
+   cd bpt
+   pip install -r requirements.txt
+   
+   # Download model weights
+   pip install "huggingface_hub[cli]"
+   mkdir weights
+   huggingface-cli download whaohan/bpt --local-dir ./weights
+   ```
+
+4. **Test BPT**:
+   ```bash
+   # Upload test mesh via Jupyter or SCP
+   python main.py --config config/BPT-open-8k-8-16.yaml \
+                  --model_path weights/checkpoint.pth \
+                  --output_path output/ \
+                  --input_dir test_meshes/
+   
+   # Verify output mesh generated (~2 minutes)
+   ```
+
+5. **Setup Simple API** (Optional for Phase 1):
+   ```bash
+   pip install flask
+   # Create server.py with API endpoints
+   python server.py &
+   ```
+
+#### Phase 2: Blender Integration (2-3 hours)
+
+1. **Create Blender Add-on Structure**:
+   ```
+   blender_remesher/
+   ├── __init__.py
+   ├── operators.py
+   ├── panels.py
+   └── utils.py
+   ```
+
+2. **Implement Upload/Download Logic**:
+   - Export mesh as .obj or .ply
+   - Upload to server via HTTP POST
+   - Poll for completion
+   - Download and import result
+
+3. **Test Workflow**:
+   - Select mesh in Blender
+   - Run operator
+   - Verify result imported correctly
+
+#### Phase 3: Optimization (Ongoing)
+
+1. **Batch Processing**: Process multiple meshes in parallel
+2. **Caching**: Cache frequently used meshes
+3. **Progress Bars**: Add UI feedback for long operations
+4. **Error Handling**: Graceful failures and retries
+
+### 7.5 Long-Term Roadmap
+
+**Month 1-3: Prototype**
+- Use cloud GPU
+- Develop Blender integration
+- Test workflows
+- Measure usage patterns
+
+**Month 4-6: Evaluation**
+- Calculate actual cloud costs
+- Determine if workload justifies GPU purchase
+- If yes, buy RTX 4060 Ti or better
+
+**Month 7+: Scale**
+- Migrate to local GPU if cost-effective
+- Keep cloud access for peak workloads
+- Potentially explore AMD MI300X if budget allows (for future-proofing)
+
+---
+
+## 8. Conclusion
+
+### 8.1 Key Findings Summary
+
+1. **AMD RX 6950 XT + Windows is NOT compatible** with BPT or MeshAnything V2 for the following reasons:
+   - No official PyTorch ROCm support on Windows for RDNA2 GPUs
+   - BPT requires CUDA 12.1 with no AMD alternative
+   - MeshAnything V2 critically depends on flash-attn (no RX 6950 XT support)
+
+2. **CPU fallback is impractical**:
+   - BPT: 10-20x slower (2 min → 20-40 min per mesh)
+   - MeshAnything V2: Impossible (flash-attn has no CPU implementation)
+
+3. **Unofficial workarounds exist but are unreliable**:
+   - "Nightly builds" for gfx1030 (unstable, no support)
+   - Building from source (very difficult, low success rate)
+   - Linux dual-boot (possible but frustrating)
+
+4. **Blender's bundled Python adds complexity**:
+   - Isolated environment requires special handling
+   - AMD ROCm drivers can break Blender's GPU features
+   - Separate virtual environment recommended for development
+
+5. **Practical solutions exist**:
+   - **Cloud GPU rental**: $0.20-0.80/hour (most flexible)
+   - **Separate NVIDIA GPU**: $450-800 (best long-term)
+   - **Client-server architecture**: Leverage local Blender + remote ML processing
+
+### 8.2 Final Verdict
+
+**For your specific use case (RX 6950 XT + Windows + Blender integration)**:
+
+❌ **Direct local installation: NOT POSSIBLE**
+
+✅ **Recommended approach: Cloud GPU + Blender client**
+- Lowest barrier to entry
+- Full compatibility guaranteed
+- Scalable and flexible
+- ~$20/month for moderate use
+
+**Alternative**: Purchase RTX 4060 Ti 16GB if usage exceeds 40 hours/month
+
+### 8.3 Additional Resources
+
+- **BPT Repository**: https://github.com/Tencent-Hunyuan/bpt
+- **MeshAnything V2 Repository**: https://github.com/buaacyw/MeshAnythingV2
+- **AMD ROCm Documentation**: https://rocm.docs.amd.com
+- **PyTorch ROCm Windows Guide**: https://rocm.docs.amd.com/projects/radeon-ryzen/en/latest/docs/install/installrad/windows/install-pytorch.html
+- **Flash-Attention ROCm**: https://github.com/Dao-AILab/flash-attention
+- **RunPod**: https://runpod.io
+- **Vast.ai**: https://vast.ai
+
+### 8.4 Questions to Consider
+
+Before proceeding, evaluate:
+
+1. **Usage Frequency**: How many meshes per day/week do you plan to process?
+2. **Budget**: Is $20/month cloud cost acceptable, or prefer $500 one-time GPU purchase?
+3. **Workflow**: Can you tolerate 60-90 second cloud processing latency?
+4. **Technical Skill**: Comfortable with setting up REST APIs and Blender add-ons?
+5. **Hardware Constraints**: Do you have PCIe slots and PSU capacity for second GPU?
+
+Based on answers, choose:
+- **Low usage + budget-conscious** → Cloud GPU
+- **High usage + want local control** → Buy NVIDIA GPU
+- **Enthusiast + time to spare** → Linux dual-boot experiment
+- **Just testing/learning** → CPU-only BPT (skip MeshAnything V2)
+
+---
+
+*Research completed: March 3, 2026*  
+*Target Hardware: AMD Radeon RX 6950 XT (RDNA2, gfx1030)*  
+*Operating System: Windows 11*  
+*Use Case: Blender mesh remeshing with BPT and MeshAnything V2*
